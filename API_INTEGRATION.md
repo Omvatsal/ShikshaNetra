@@ -196,7 +196,7 @@ JWT_SECRET=your-super-secret-jwt-key
 JWT_REFRESH_SECRET=your-super-secret-refresh-key
 
 # MongoDB Atlas
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/shikshanetra
+MONGODB_URI=
 
 # Admin Secret
 ADMIN_SECRET=your-admin-secret
