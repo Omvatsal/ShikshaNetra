@@ -14,7 +14,6 @@ export async function uploadVideoToStorage(
     fileSize: number;
     mimeType: string;
     videoUrl: string;
-    signedUrl: string;
     storagePath: string;
   };
   error?: string;
@@ -30,7 +29,7 @@ export async function uploadVideoToStorage(
       };
     }
 
-    console.log(`Video uploaded successfully with signed URL`);
+    console.log(`Video uploaded successfully`);
 
     // For private buckets, we use the storage path as the video URL identifier
     // Actual playback will require generating signed URLs
@@ -44,7 +43,6 @@ export async function uploadVideoToStorage(
         fileSize: file.size,
         mimeType: file.type,
         videoUrl: videoUrl,
-        signedUrl: uploadResult.signedUrl!,
         storagePath: uploadResult.path!,
       },
     };
@@ -58,24 +56,51 @@ export async function uploadVideoToStorage(
 }
 
 /**
- * Prepare ML microservice payload with signed video URL
+ * Convert File to base64 string for sending to ML service
  */
-export function prepareMLPayload(
-  signedUrl: string,
+export async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Extract base64 part (remove data:video/...;base64, prefix)
+      const base64String = result.split(",")[1];
+      resolve(base64String);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Prepare ML microservice payload with downloaded video content (base64)
+ * Instead of sending a signed URL, download the video and send it as base64
+ */
+export async function prepareMLPayload(
+  file: File,
   subject: string,
   language: string,
-  file: File,
   userId: string
 ) {
-  return {
-    video_url: signedUrl,
-    topic: subject,
-    language: language,
-    metadata: {
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-      userId: userId,
-    },
-  };
+  try {
+    // Convert file to base64
+    const videoBase64 = await fileToBase64(file);
+    
+    return {
+      video_data: videoBase64,
+      video_filename: file.name,
+      video_mimeType: file.type,
+      topic: subject,
+      language: language,
+      metadata: {
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        userId: userId,
+      },
+    };
+  } catch (error) {
+    console.error("Error preparing ML payload:", error);
+    throw error;
+  }
 }

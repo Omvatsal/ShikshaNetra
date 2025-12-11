@@ -2,110 +2,91 @@ import { NextRequest, NextResponse } from "next/server";
 import { authMiddleware } from "@/lib/middleware/auth";
 import { createAnalysis } from "@/lib/models/Analysis";
 import { transformMLResponse } from "@/lib/services/analysisService";
-import { uploadVideoToStorage, prepareMLPayload } from "@/lib/utils/videoUpload";
-import { MLResponse } from "@/lib/types/analysis";
+import { uploadVideoToStorage } from "@/lib/utils/videoUpload";
+import { Client } from "@gradio/client";
 
-const ML_MICROSERVICE_URL = process.env.ML_MICROSERVICE_URL || "http://localhost:8000";
+const HF_SPACE = "genathon00/sikshanetra-model";
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify authentication
+    // Authenticate user
     const user = authMiddleware(req);
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized - Invalid or missing token" },
+        { error: "Unauthorized - invalid or missing token" },
         { status: 401 }
       );
     }
 
-    // Parse form data
+    // Parse form-data
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const subject = formData.get("subject") as string;
     const language = formData.get("language") as string;
 
-    // Validate inputs
-    if (!file) {
+    if (!file || !subject || !language) {
       return NextResponse.json(
-        { success: false, error: "File is required" },
+        { error: "File, subject, and language are required" },
         { status: 400 }
       );
     }
 
-    if (!subject || !language) {
-      return NextResponse.json(
-        { success: false, error: "Subject and language are required" },
-        { status: 400 }
-      );
-    }
-
-    // Upload video to Supabase Storage using utility function
+    // Upload video to Supabase (for saving)
     const uploadResult = await uploadVideoToStorage(file, user.id);
-
     if (!uploadResult.success) {
       return NextResponse.json(
-        { 
-          success: false,
-          error: uploadResult.error || "Failed to upload video to storage"
-        },
+        { error: uploadResult.error || "Upload failed" },
         { status: 500 }
       );
     }
 
     const videoMetadata = uploadResult.videoMetadata!;
 
-    // Prepare ML payload using utility function with signed URL
-    const mlPayload = prepareMLPayload(
-      videoMetadata.signedUrl,
-      subject,
-      language,
-      file,
-      user.id
-    );
+    // Convert uploaded File → Blob for Gradio
+    const buffer = await file.arrayBuffer();
+    const videoBlob = new Blob([buffer], { type: file.type });
 
-    console.log(`Sending signed video URL to ML service (scores-only)`);
-
-    // Send request to ML microservice scores-only endpoint
-    const mlResponse = await fetch(`${ML_MICROSERVICE_URL}/analyze/scores-only`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(mlPayload),
-    });
-
-    // Get response as JSON
-    const mlResult: MLResponse = await mlResponse.json();
-
-    // Handle ML service errors
-    if (!mlResponse.ok || !mlResult.success) {
-      const errorMessage = mlResult.error || `ML service returned status ${mlResponse.status}`;
-      
+    if (!HF_SPACE) {
       return NextResponse.json(
-        {
-          success: false,
-          error: errorMessage,
-        },
-        { status: mlResponse.status }
+        { error: "ML microservice URL is not configured" },
+        { status: 500 }
       );
     }
 
-    // Transform and flatten ML response
-    const analysisData = transformMLResponse(
-      mlResult,
+    console.log("Connecting to Gradio model:", HF_SPACE);
+
+    // Connect to HuggingFace Gradio Space
+    const client = await Client.connect(HF_SPACE);
+
+    console.log("Sending video to Gradio /analyze_session");
+
+    // Call ML model
+    const result = await client.predict("/analyze_session", {
+      video: videoBlob,
+    });
+    const [summary, scores, feedback, rawData, buttonState] = (result as any)
+      .data;
+
+    console.log("ML analysis result received");
+
+    // Transform ML response
+    const transformed = transformMLResponse(
+      { success: true, data: rawData as any },
       user.id,
       videoMetadata,
       subject,
       language,
-      mlResult.data?.session_id
+      (rawData as any)?.session_id
     );
 
-    // Save analysis to database with video URL
+    // Save to DB
     const savedAnalysis = await createAnalysis({
-      ...analysisData,
+      ...transformed,
       videoUrl: videoMetadata.videoUrl,
       status: "completed",
     });
+
+    console.log("Analysis saved with ID:", savedAnalysis.id);
 
     // Return the analysis result
     return NextResponse.json(
@@ -113,28 +94,19 @@ export async function POST(req: NextRequest) {
         success: true,
         message: "Scores analysis completed successfully",
         analysisId: savedAnalysis.id,
-        data: mlResult.data,
+        data: scores,
         note: "This is a scores-only analysis. AI coaching feedback was not generated.",
       },
       { status: 200 }
     );
-  } catch (error) {
-    console.error("Scores-only analyze error:", error);
-
-    if (error instanceof TypeError && error.message.includes("fetch")) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: "ML microservice is not available on port 8000" 
-        },
-        { status: 503 }
-      );
-    }
+  } catch (error: any) {
+    console.error("Analyze error:", error);
 
     return NextResponse.json(
-      { 
+      {
         success: false,
-        error: "Internal server error"
+        error: "ML analysis failed",
+        details: error?.message || "Unknown error",
       },
       { status: 500 }
     );
