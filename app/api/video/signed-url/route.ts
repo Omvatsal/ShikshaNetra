@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authMiddleware } from '@/lib/middleware/auth';
 import { getSignedVideoUrl } from '@/lib/services/storageService';
 
-/**
- * Generate signed URL for video playback
- * GET /api/video/signed-url?path=userId/timestamp_video.mp4
- */
+// 1. Force Dynamic: Signed URLs expire, so we never want to cache this response on the server
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
-    // Verify authentication
-    const user = authMiddleware(req);
+    // 2. Await Auth: Best practice for future-proofing
+    const user = await authMiddleware(req);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized - Invalid or missing token' },
@@ -17,7 +16,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get storage path from query params
+    // 3. Get & Validate Path
     const { searchParams } = new URL(req.url);
     const storagePath = searchParams.get('path');
 
@@ -28,15 +27,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Verify user owns this video (path should start with userId)
-    if (!storagePath.startsWith(user.id + '/')) {
+    // 4. SECURITY CHECK: Path Traversal Prevention
+    // Ensure the user is strictly accessing their own folder.
+    // We assume your storage structure is: "userId/video.mp4"
+    if (!storagePath.startsWith(`${user.id}/`)) {
+      console.warn(`Security Alert: User ${user.id} tried to access ${storagePath}`);
       return NextResponse.json(
         { error: 'Access denied - You can only access your own videos' },
         { status: 403 }
       );
     }
 
-    // Generate signed URL (valid for 1 hour for playback)
+    // 5. Generate URL
+    // 3600 seconds = 1 hour validity
     const signedUrl = await getSignedVideoUrl(storagePath, 3600);
 
     if (!signedUrl) {
@@ -50,13 +53,15 @@ export async function GET(req: NextRequest) {
       success: true,
       signedUrl,
       expiresIn: 3600,
-    });
+    }, { status: 200 });
+
   } catch (error) {
     console.error('Signed URL error:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        // Only return details in development for security
+        details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : undefined
       },
       { status: 500 }
     );

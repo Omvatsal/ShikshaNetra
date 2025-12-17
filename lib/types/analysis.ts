@@ -8,7 +8,17 @@ export interface VideoMetadata {
   storagePath?: string;
 }
 
-// ML Microservice Response Structure
+// --- NEW STATUS TYPES (Waterfall Logic) ---
+export type ComponentStatus = "pending" | "processing" | "completed" | "failed";
+
+export interface ProcessingStatus {
+  video: ComponentStatus;
+  audio: ComponentStatus;
+  text: ComponentStatus;
+  overall: ComponentStatus; // "completed" only when ALL 3 are done
+}
+
+// --- ML RESPONSE STRUCTURES ---
 export interface AudioScores {
   clarity_score: number;
   confidence_score: number;
@@ -56,50 +66,59 @@ export interface MLResponse {
     topic: string;
     transcript: string;
     scores: Scores;
-    coach_feedback?: CoachFeedback; // Optional: only present in full analysis, not scores-only
+    coach_feedback?: CoachFeedback;
   };
   error?: string | null;
 }
 
+// --- MAIN ANALYSIS INTERFACE ---
 export interface Analysis {
   _id?: ObjectId;
   id?: string;
   userId: string;
-  videoMetadata: VideoMetadata;
+  videoMetadata?: VideoMetadata; // Made optional for initial create
   subject: string;
   language: string;
   videoUrl?: string;
   
-  // Flattened ML response fields for easy querying
-  sessionId: string;
-  topic: string;
-  transcript: string;
+  // Flattened ML response fields
+  sessionId?: string;
+  topic?: string;
+  transcript?: string;
   
   // Audio scores
-  clarityScore: number;
-  confidenceScore: number;
-  audioFeatures: number[];
+  clarityScore?: number;
+  confidenceScore?: number;
+  audioFeatures?: number[];
   
   // Video scores
-  engagementScore: number;
-  gestureIndex: number;
-  dominantEmotion: string;
+  engagementScore?: number;
+  gestureIndex?: number;
+  dominantEmotion?: string;
   
   // Text scores
-  technicalDepth: number;
-  interactionIndex: number;
-  topicMatches: TopicMatches;
-  topicRelevanceScore: number;
+  technicalDepth?: number;
+  interactionIndex?: number;
+  topicMatches?: TopicMatches;
+  topicRelevanceScore?: number;
   
   // Coach feedback
   coachFeedbackError?: string;
   coachSuggestions?: string[];
   coachStrengths?: string[];
   
-  // Original ML response (for reference)
-  mlResponse: MLResponse;
+  // Original ML response
+  mlResponse?: MLResponse;
   
-  status: "processing" | "completed" | "failed";
+  // *** GRANULAR STATUS ***
+  processingStatus: ProcessingStatus;
+  
+  // Legacy status
+  status?: "processing" | "completed" | "failed"; 
+
+  // *** NEW: PROGRESS FIELD ***
+  progress: number; 
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -110,38 +129,17 @@ export interface AnalysisResponse extends Omit<Analysis, "_id"> {
 
 export interface CreateAnalysisInput {
   userId: string;
-  videoMetadata: VideoMetadata;
   subject: string;
   language: string;
-  videoUrl?: string;
-  sessionId: string;
-  topic: string;
-  transcript: string;
-  clarityScore: number;
-  confidenceScore: number;
-  audioFeatures: number[];
-  engagementScore: number;
-  gestureIndex: number;
-  dominantEmotion: string;
-  technicalDepth: number;
-  interactionIndex: number;
-  topicMatches: TopicMatches;
-  topicRelevanceScore: number;
-  coachFeedbackError?: string;
-  coachSuggestions?: string[];
-  coachStrengths?: string[];
-  mlResponse: MLResponse;
-  status: "processing" | "completed" | "failed";
-}
-
-export interface UpdateAnalysisInput {
-  videoMetadata?: VideoMetadata;
-  subject?: string;
-  language?: string;
+  
+  // Optional on Create (because we fill them later)
+  videoMetadata?: VideoMetadata; 
   videoUrl?: string;
   sessionId?: string;
   topic?: string;
   transcript?: string;
+  
+  // Scores (Optional initially)
   clarityScore?: number;
   confidenceScore?: number;
   audioFeatures?: number[];
@@ -152,11 +150,50 @@ export interface UpdateAnalysisInput {
   interactionIndex?: number;
   topicMatches?: TopicMatches;
   topicRelevanceScore?: number;
+  
   coachFeedbackError?: string;
   coachSuggestions?: string[];
   coachStrengths?: string[];
   mlResponse?: MLResponse;
+  
+  processingStatus?: Partial<ProcessingStatus>;
   status?: "processing" | "completed" | "failed";
+  
+  // *** NEW: Allow setting initial progress ***
+  progress?: number; 
+}
+
+export interface UpdateAnalysisInput {
+  videoMetadata?: VideoMetadata;
+  subject?: string;
+  language?: string;
+  videoUrl?: string;
+  sessionId?: string;
+  topic?: string;
+  transcript?: string;
+  
+  // Scores
+  clarityScore?: number;
+  confidenceScore?: number;
+  audioFeatures?: number[];
+  engagementScore?: number;
+  gestureIndex?: number;
+  dominantEmotion?: string;
+  technicalDepth?: number;
+  interactionIndex?: number;
+  topicMatches?: TopicMatches;
+  topicRelevanceScore?: number;
+  
+  coachFeedbackError?: string;
+  coachSuggestions?: string[];
+  coachStrengths?: string[];
+  mlResponse?: MLResponse;
+  
+  processingStatus?: Partial<ProcessingStatus>;
+  status?: "processing" | "completed" | "failed";
+  
+  // *** NEW: Allow updating progress ***
+  progress?: number;
 }
 
 export interface AnalysisStats {
@@ -174,7 +211,9 @@ export interface AnalysisSearchFilters {
   minTechnicalDepth?: number;
   dominantEmotion?: string;
   topic?: string;
+  
   status?: "processing" | "completed" | "failed";
+  
   fromDate?: Date;
   toDate?: Date;
 }

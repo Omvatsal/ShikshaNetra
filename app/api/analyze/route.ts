@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authMiddleware } from "@/lib/middleware/auth";
-import { createAnalysis } from "@/lib/models/Analysis";
+// UPDATE: Import from the new models folder
+import { createAnalysis } from "@/lib/models/Analysis"; 
 import { transformMLResponse } from "@/lib/services/analysisService";
 import { uploadVideoToStorage } from "@/lib/utils/videoUpload";
 import { Client } from "@gradio/client";
@@ -9,8 +10,8 @@ const HF_SPACE = "genathon00/sikshanetra-model";
 
 export async function POST(req: NextRequest) {
   try {
-    // Authenticate user
-    const user = authMiddleware(req);
+    // 1. Authenticate user
+    const user = await authMiddleware(req); // Added await just in case your auth is async
     if (!user) {
       return NextResponse.json(
         { error: "Unauthorized - invalid or missing token" },
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Parse form-data
+    // 2. Parse form-data
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const subject = formData.get("subject") as string;
@@ -31,18 +32,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Upload video to Supabase (for saving)
+    // 3. Upload video to Storage (Supabase/S3)
     const uploadResult = await uploadVideoToStorage(file, user.id);
-    if (!uploadResult.success) {
+    if (!uploadResult.success || !uploadResult.videoMetadata) {
       return NextResponse.json(
         { error: uploadResult.error || "Upload failed" },
         { status: 500 }
       );
     }
 
-    const videoMetadata = uploadResult.videoMetadata!;
+    const videoMetadata = uploadResult.videoMetadata;
 
-    // Convert uploaded File → Blob for Gradio
+    // 4. Prepare for Gradio
     const buffer = await file.arrayBuffer();
     const videoBlob = new Blob([buffer], { type: file.type });
 
@@ -54,36 +55,40 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("Connecting to Gradio model:", HF_SPACE);
-
-    // Connect to HuggingFace Gradio Space
     const client = await Client.connect(HF_SPACE);
 
     console.log("Sending video to Gradio /analyze_session");
 
-    // Call ML model
+    // 5. Call ML Model (Waits for full completion)
+    // Note: This blocks until analysis is 100% done
     const result = await client.predict("/analyze_session", {
       video: videoBlob,
     });
-    const [summary, scores, feedback, rawData, buttonState] = (result as any)
-      .data;
+    
+    // Destructure result based on your Gradio API 
+    // (Assuming this matches your Python return signature)
+    const [summary, scores, feedback, rawData, buttonState] = (result as any).data;
 
     console.log("ML analysis result received");
 
-    // Transform ML response
+    // 6. Transform Response
+    // FIX: Passed videoMetadata.videoUrl as the correct last argument
     const transformed = transformMLResponse(
       { success: true, data: rawData as any },
       user.id,
       videoMetadata,
       subject,
       language,
-      (rawData as any)?.session_id
+      videoMetadata.videoUrl 
     );
 
-    // Save to DB
+    // 7. Save to DB
+    // Since 'transformed' already contains { processingStatus: { overall: 'completed' ... } }
+    // we don't need to manually set status here.
     const savedAnalysis = await createAnalysis({
       ...transformed,
-      videoUrl: videoMetadata.videoUrl,
-      status: "completed",
+      // Ensure we have a sessionId even if ML failed to return one
+      sessionId: transformed.sessionId || `sess_${Date.now()}`,
     });
 
     console.log("Analysis saved with ID:", savedAnalysis.id);
@@ -96,6 +101,7 @@ export async function POST(req: NextRequest) {
       },
       { status: 200 }
     );
+
   } catch (error: any) {
     console.error("Analyze error:", error);
 
