@@ -1,7 +1,29 @@
+"use client";
+
 import Link from "next/link";
 import { Card } from "@/components/Card";
+import { useEffect, useState } from "react";
 
 export default function HomePage() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const checkLogin = () => {
+      const token = localStorage.getItem("shikshanetra_token");
+      const loggedIn = localStorage.getItem("shikshanetra_logged_in") === "true";
+      setIsLoggedIn(!!token || loggedIn);
+    };
+    checkLogin();
+    window.addEventListener("storage", checkLogin);
+    const interval = setInterval(checkLogin, 1000);
+    return () => {
+      window.removeEventListener("storage", checkLogin);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const getStartedLink = isLoggedIn ? "/upload" : "/signup";
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-8 sm:pt-10">
       {/* Hero */}
@@ -21,10 +43,7 @@ export default function HomePage() {
             feedback to mentors and institutions. Elevate teaching standards with data-driven insights.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/demo" className="btn-primary text-sm sm:text-base px-6 py-3">
-              Try Live Demo
-            </Link>
-            <Link href="/signup" className="btn-outline text-sm sm:text-base px-6 py-3">
+            <Link href={getStartedLink} className="btn-primary text-sm sm:text-base px-6 py-3">
               Get Started Free
             </Link>
           </div>
@@ -32,10 +51,6 @@ export default function HomePage() {
             <div className="flex items-center gap-1.5">
               <span className="text-emerald-600">✓</span>
               <span>No credit card required</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-emerald-600">✓</span>
-              <span>Full-featured demo</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-emerald-600">✓</span>
@@ -171,10 +186,7 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/demo" className="btn-primary">
-              Try Live Demo
-            </Link>
-            <Link href="/signup" className="btn-outline">
+            <Link href={getStartedLink} className="btn-primary">
               Get Started Free
             </Link>
           </div>

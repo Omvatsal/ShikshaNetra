@@ -1,20 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
 
 export default function LoginPage() {
   const { showToast } = useToast();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [apiError, setApiError] = useState<string>("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    // Redirect if already logged in
+    const token = localStorage.getItem("shikshanetra_token");
+    const loggedIn = localStorage.getItem("shikshanetra_logged_in") === "true";
+    if (token || loggedIn) {
+      router.push("/dashboard");
+    }
+  }, [router]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApiError("");
     const nextErrors: typeof errors = {};
@@ -22,46 +32,14 @@ export default function LoginPage() {
     if (!password) nextErrors.password = "Password is required.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMessage = data.error || "Login failed. Please try again.";
-        setApiError(errorMessage);
-        showToast(errorMessage);
-        setLoading(false);
-        return;
-      }
-      
-      setApiError("");
-
-      // Store access token and user info
-      localStorage.setItem("shikshanetra_token", data.accessToken);
-      localStorage.setItem("shikshanetra_user", JSON.stringify(data.user));
-      localStorage.setItem("shikshanetra_logged_in", "true");
-
-      showToast("Login successful! Redirecting...");
-      
-      // Redirect to dashboard page
-      setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 1000);
-    } catch (error) {
-      console.error("Login error:", error);
-      showToast("❌ An error occurred during login");
-      setLoading(false);
-    }
+    // TODO: Replace demo auth with real authentication API call
+    localStorage.setItem("shikshanetra_logged_in", "true");
+    localStorage.setItem("shikshanetra_token", "demo_token");
+    document.cookie = "shikshanetra_logged_in=true; path=/; max-age=604800";
+    showToast("Login successful. Redirecting...");
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 1000);
   };
 
   return (
@@ -122,12 +100,8 @@ export default function LoginPage() {
                   <span>Remember me</span>
                 </label>
               </div>
-              <button 
-                type="submit" 
-                className="btn-primary w-full text-sm" 
-                disabled={loading}
-              >
-                {loading ? "Logging in..." : "Log In"}
+              <button type="submit" className="btn-primary w-full text-sm">
+                Log In
               </button>
             </form>
             <p className="mt-6 text-center text-xs text-slate-600">

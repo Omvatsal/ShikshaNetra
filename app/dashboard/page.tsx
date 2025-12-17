@@ -42,21 +42,34 @@ export default function DashboardPage() {
   const [dateTo, setDateTo] = useState<string>("");
 
   useEffect(() => {
-    const userData = localStorage.getItem("shikshanetra_user");
-    if (!userData) {
+    const token = localStorage.getItem("shikshanetra_token");
+    const loggedIn = localStorage.getItem("shikshanetra_logged_in") === "true";
+    
+    if (!token && !loggedIn) {
       showToast("Please login to access dashboard");
       router.push("/login");
       return;
     }
 
-    try {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-      fetchAnalysisHistory();
-    } catch (error) {
-      console.error("Error parsing user data:", error);
-      router.push("/login");
+    const userData = localStorage.getItem("shikshanetra_user");
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    } else {
+      // Create demo user if not exists
+      setUser({
+        id: "demo",
+        email: "demo@example.com",
+        name: "Demo User",
+        role: "mentor",
+      });
     }
+    
+    fetchAnalysisHistory();
   }, []);
 
   const fetchAnalysisHistory = async () => {
@@ -183,22 +196,6 @@ export default function DashboardPage() {
     };
   }, [filteredAnalyses]);
 
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      localStorage.removeItem("shikshanetra_token");
-      localStorage.removeItem("shikshanetra_user");
-      localStorage.removeItem("shikshanetra_logged_in");
-      showToast("Logged out successfully");
-      setTimeout(() => router.push("/"), 500);
-    } catch (error) {
-      console.error("Logout error:", error);
-      localStorage.removeItem("shikshanetra_token");
-      localStorage.removeItem("shikshanetra_user");
-      localStorage.removeItem("shikshanetra_logged_in");
-      router.push("/");
-    }
-  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -241,17 +238,9 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-primary-50/20 py-8">
       <div className="mx-auto max-w-7xl px-4">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-            <p className="mt-2 text-slate-600">Welcome back, {user.name}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
-          >
-            Logout
-          </button>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+          <p className="mt-2 text-slate-600">Welcome back, {user.name}</p>
         </div>
 
         {/* Filters */}

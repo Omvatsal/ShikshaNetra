@@ -45,7 +45,8 @@ export default function ReportPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     // Check if user is logged in
     const token = localStorage.getItem("shikshanetra_token");
-    if (!token) {
+    const loggedIn = localStorage.getItem("shikshanetra_logged_in") === "true";
+    if (!token && !loggedIn) {
       showToast("Please login to view reports");
       router.push("/login");
       return;
