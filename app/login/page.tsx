@@ -12,9 +12,11 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [apiError, setApiError] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiError("");
     const nextErrors: typeof errors = {};
     if (!email) nextErrors.email = "Email is required.";
     if (!password) nextErrors.password = "Password is required.";
@@ -35,10 +37,14 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        showToast(data.error || "Login failed. Please try again.");
+        const errorMessage = data.error || "Login failed. Please try again.";
+        setApiError(errorMessage);
+        showToast(errorMessage);
         setLoading(false);
         return;
       }
+      
+      setApiError("");
 
       // Store access token and user info
       localStorage.setItem("shikshanetra_token", data.accessToken);
@@ -72,6 +78,11 @@ export default function LoginPage() {
                 </p>
               </div>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {apiError && (
+                <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3">
+                  <p className="text-sm font-semibold text-red-800">{apiError}</p>
+                </div>
+              )}
               <div className="space-y-1.5 text-sm">
                 <label className="block text-xs font-medium text-slate-700">
                   Email
@@ -83,7 +94,7 @@ export default function LoginPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.email && (
-                  <p className="text-[11px] text-rose-600">{errors.email}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.email}</p>
                 )}
               </div>
               <div className="space-y-1.5 text-sm">
@@ -97,7 +108,7 @@ export default function LoginPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.password && (
-                  <p className="text-[11px] text-rose-600">{errors.password}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.password}</p>
                 )}
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
