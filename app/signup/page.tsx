@@ -20,9 +20,11 @@ export default function SignupPage() {
     password?: string;
     confirmPassword?: string;
   }>({});
+  const [apiError, setApiError] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiError("");
     const nextErrors: typeof errors = {};
     if (!fullName) nextErrors.fullName = "Full name is required.";
     if (!email) nextErrors.email = "Email is required.";
@@ -54,10 +56,14 @@ export default function SignupPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        showToast(data.error || "Signup failed. Please try again.");
+        const errorMessage = data.error || "Signup failed. Please try again.";
+        setApiError(errorMessage);
+        showToast(errorMessage);
         setLoading(false);
         return;
       }
+      
+      setApiError("");
 
       // Store access token and user info
       localStorage.setItem("shikshanetra_token", data.accessToken);
@@ -94,6 +100,11 @@ export default function SignupPage() {
               </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {apiError && (
+                <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3">
+                  <p className="text-sm font-semibold text-red-800">{apiError}</p>
+                </div>
+              )}
               <div className="space-y-1.5 text-sm">
                 <label className="block text-xs font-medium text-slate-700">
                   Full Name
@@ -105,7 +116,7 @@ export default function SignupPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.fullName && (
-                  <p className="text-[11px] text-rose-600">{errors.fullName}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.fullName}</p>
                 )}
               </div>
 
@@ -120,7 +131,7 @@ export default function SignupPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.email && (
-                  <p className="text-[11px] text-rose-600">{errors.email}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.email}</p>
                 )}
               </div>
 
@@ -139,7 +150,7 @@ export default function SignupPage() {
                   <option>Other</option>
                 </select>
                 {errors.role && (
-                  <p className="text-[11px] text-rose-600">{errors.role}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.role}</p>
                 )}
               </div>
 
@@ -154,7 +165,7 @@ export default function SignupPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.password && (
-                  <p className="text-[11px] text-rose-600">{errors.password}</p>
+                  <p className="text-[11px] font-medium text-red-700">{errors.password}</p>
                 )}
               </div>
 
@@ -169,7 +180,7 @@ export default function SignupPage() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 {errors.confirmPassword && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-[11px] font-medium text-red-700">
                     {errors.confirmPassword}
                   </p>
                 )}
