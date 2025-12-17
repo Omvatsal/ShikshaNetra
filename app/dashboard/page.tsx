@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
 import { useRouter } from "next/navigation";
 import { getWithAuth } from "@/lib/utils/api";
+import { MetricsRadarChart, MetricsData } from "@/components/MetricsRadarChart";
+import { TimelineSummary } from "@/components/TimelineSummary";
+import { MetricsComparisonCard } from "@/components/MetricsComparisonCard";
 
 interface UserData {
   id: string;
@@ -24,6 +27,8 @@ interface Analysis {
   confidenceScore: number;
   engagementScore: number;
   technicalDepth: number;
+  interactionIndex?: number;
+  topicRelevanceScore?: number;
 }
 
 export default function DashboardPage() {
@@ -32,13 +37,11 @@ export default function DashboardPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [limit] = useState(20); // Increased from 10 to 20
+  const [subjectFilter, setSubjectFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   useEffect(() => {
-    // Check if user is logged in
     const userData = localStorage.getItem("shikshanetra_user");
     if (!userData) {
       showToast("Please login to access dashboard");
@@ -58,59 +61,143 @@ export default function DashboardPage() {
 
   const fetchAnalysisHistory = async () => {
     try {
-      const response = await getWithAuth(`/api/analyze/history?limit=${limit}`);
+      const response = await getWithAuth(`/api/analyze/history?limit=100`);
 
       if (!response.ok) {
         throw new Error("Failed to fetch analysis history");
       }
 
       const data = await response.json();
-      const fetchedAnalyses = data.analyses || [];
-      setAnalyses(fetchedAnalyses);
-      
-      // If we got fewer results than the limit, there are no more
-      setHasMore(fetchedAnalyses.length === limit);
+      setAnalyses(data.analyses || []);
     } catch (error) {
       console.error("Error fetching analyses:", error);
       showToast("Failed to load analysis history");
     } finally {
       setLoading(false);
-      setStatsLoading(false);
     }
   };
 
+  // Filter analyses based on filters
+  const filteredAnalyses = useMemo(() => {
+    let filtered = [...analyses];
+
+    if (subjectFilter !== "all") {
+      filtered = filtered.filter((a) => a.subject === subjectFilter);
+    }
+
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      filtered = filtered.filter((a) => new Date(a.createdAt) >= fromDate);
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((a) => new Date(a.createdAt) <= toDate);
+    }
+
+    return filtered;
+  }, [analyses, subjectFilter, dateFrom, dateTo]);
+
+  // Get unique subjects for filter
+  const uniqueSubjects = useMemo(() => {
+    const subjects = new Set(analyses.map((a) => a.subject));
+    return Array.from(subjects).sort();
+  }, [analyses]);
+
+  // Calculate average metrics for radar chart
+  const averageMetrics: MetricsData = useMemo(() => {
+    if (filteredAnalyses.length === 0) {
+      return {
+        clarity: 0,
+        confidence: 0,
+        engagement: 0,
+        technicalDepth: 0,
+        interaction: 0,
+        topicRelevance: 0,
+      };
+    }
+
+    const totals = filteredAnalyses.reduce(
+      (acc, a) => ({
+        clarity: acc.clarity + a.clarityScore,
+        confidence: acc.confidence + a.confidenceScore,
+        engagement: acc.engagement + a.engagementScore,
+        technicalDepth: acc.technicalDepth + a.technicalDepth,
+        interaction: acc.interaction + (a.interactionIndex || 0) * 10,
+        topicRelevance: acc.topicRelevance + (a.topicRelevanceScore || 0),
+      }),
+      {
+        clarity: 0,
+        confidence: 0,
+        engagement: 0,
+        technicalDepth: 0,
+        interaction: 0,
+        topicRelevance: 0,
+      }
+    );
+
+    const count = filteredAnalyses.length;
+    return {
+      clarity: totals.clarity / count,
+      confidence: totals.confidence / count,
+      engagement: totals.engagement / count,
+      technicalDepth: totals.technicalDepth / count,
+      interaction: totals.interaction / count,
+      topicRelevance: totals.topicRelevance / count,
+    };
+  }, [filteredAnalyses]);
+
+  // Get timeline data
+  const timelineData = useMemo(() => {
+    return filteredAnalyses.map((a) => ({
+      date: a.createdAt,
+      clarity: a.clarityScore,
+      engagement: a.engagementScore,
+      confidence: a.confidenceScore,
+    }));
+  }, [filteredAnalyses]);
+
+  // Get latest two sessions for comparison
+  const comparisonData = useMemo(() => {
+    const sorted = [...filteredAnalyses].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (sorted.length < 2) return null;
+
+    const curr = sorted[0];
+    const prev = sorted[1];
+
+    return {
+      prev: {
+        engagement: prev.engagementScore,
+        clarity: prev.clarityScore,
+        interaction: (prev.interactionIndex || 0) * 10,
+      },
+      curr: {
+        engagement: curr.engagementScore,
+        clarity: curr.clarityScore,
+        interaction: (curr.interactionIndex || 0) * 10,
+      },
+    };
+  }, [filteredAnalyses]);
+
   const handleLogout = async () => {
     try {
-      // Call logout API to clear refresh token cookie
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-
-      // Clear local storage
+      await fetch("/api/auth/logout", { method: "POST" });
       localStorage.removeItem("shikshanetra_token");
       localStorage.removeItem("shikshanetra_user");
       localStorage.removeItem("shikshanetra_logged_in");
-      
       showToast("Logged out successfully");
-      
-      // Redirect to home
-      setTimeout(() => {
-        router.push("/");
-      }, 500);
+      setTimeout(() => router.push("/"), 500);
     } catch (error) {
       console.error("Logout error:", error);
-      // Still clear local storage even if API fails
       localStorage.removeItem("shikshanetra_token");
       localStorage.removeItem("shikshanetra_user");
       localStorage.removeItem("shikshanetra_logged_in");
       router.push("/");
     }
-  };
-
-  const calculateAverageScore = (field: keyof Analysis) => {
-    if (analyses.length === 0) return 0;
-    const sum = analyses.reduce((acc, analysis) => acc + (Number(analysis[field]) || 0), 0);
-    return (sum / analyses.length).toFixed(1);
   };
 
   const formatDate = (dateString: string) => {
@@ -152,109 +239,159 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-primary-50/20 py-8">
-      <div className="mx-auto max-w-6xl px-4">
+      <div className="mx-auto max-w-7xl px-4">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-          <p className="mt-2 text-slate-600">
-            Welcome back, {user.name}
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+            <p className="mt-2 text-slate-600">Welcome back, {user.name}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
+          >
+            Logout
+          </button>
         </div>
 
-        {/* User Information Card */}
-        <Card className="mb-6 p-6">
-          <div className="flex items-start justify-between">
+        {/* Filters */}
+        <Card className="mb-6 p-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">
-                Profile Information
-              </h2>
-              <div className="mt-4 space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Name
-                  </p>
-                  <p className="mt-1 text-sm text-slate-900">{user.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Email
-                  </p>
-                  <p className="mt-1 text-sm text-slate-900">{user.email}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Role
-                  </p>
-                  <span
-                    className={`mt-1 inline-block rounded-full px-3 py-1 text-xs font-medium ${getRoleBadgeColor(
-                      user.role
-                    )}`}
-                  >
-                    {formatRole(user.role)}
-                  </span>
-                </div>
-              </div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                Subject
+              </label>
+              <select
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              >
+                <option value="all">All Subjects</option>
+                {uniqueSubjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
+                ))}
+              </select>
             </div>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
-            >
-              Logout
-            </button>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                Date From
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-700">
+                Date To
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              />
+            </div>
           </div>
         </Card>
 
-        {/* Statistics Cards */}
+        {/* Stats Cards */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="p-4">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
               Total Sessions
             </p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {statsLoading ? "..." : analyses.length}
+            <p className="mt-2 text-3xl font-bold text-slate-900">
+              {filteredAnalyses.length}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
               Avg Clarity
             </p>
-            <p className="mt-2 text-2xl font-bold text-primary-600">
-              {statsLoading ? "..." : calculateAverageScore("clarityScore")}
-            </p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Avg Confidence
-            </p>
-            <p className="mt-2 text-2xl font-bold text-primary-600">
-              {statsLoading ? "..." : calculateAverageScore("confidenceScore")}
+            <p className="mt-2 text-3xl font-bold text-primary-600">
+              {averageMetrics.clarity.toFixed(1)}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
               Avg Engagement
             </p>
-            <p className="mt-2 text-2xl font-bold text-primary-600">
-              {statsLoading ? "..." : calculateAverageScore("engagementScore")}
+            <p className="mt-2 text-3xl font-bold text-emerald-600">
+              {averageMetrics.engagement.toFixed(1)}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Avg Confidence
+            </p>
+            <p className="mt-2 text-3xl font-bold text-amber-600">
+              {averageMetrics.confidence.toFixed(1)}
             </p>
           </Card>
         </div>
 
-        {/* Session History */}
+        {/* Radar Chart and Timeline */}
+        <div className="mb-6 grid gap-6 lg:grid-cols-2">
+          <Card className="p-6">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Metrics Overview
+            </h2>
+            {loading ? (
+              <div className="flex h-96 items-center justify-center">
+                <p className="text-sm text-slate-500">Loading...</p>
+              </div>
+            ) : (
+              <MetricsRadarChart data={averageMetrics} label="Average Metrics" />
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Performance Timeline
+            </h2>
+            {loading ? (
+              <div className="flex h-64 items-center justify-center">
+                <p className="text-sm text-slate-500">Loading...</p>
+              </div>
+            ) : (
+              <TimelineSummary data={timelineData} />
+            )}
+          </Card>
+        </div>
+
+        {/* Session Comparison */}
+        {comparisonData && (
+          <div className="mb-6">
+            <MetricsComparisonCard
+              prev={comparisonData.prev}
+              curr={comparisonData.curr}
+              title="Latest Session Comparison"
+            />
+          </div>
+        )}
+
+        {/* Session History Table */}
         <Card className="p-6">
-          <h2 className="text-xl font-semibold text-slate-900 mb-4">
-            Recent Sessions
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            Session History
           </h2>
-          
+
           {loading ? (
-            <div className="text-center py-8 text-slate-600">
+            <div className="py-8 text-center text-slate-600">
               Loading session history...
             </div>
-          ) : analyses.length === 0 ? (
-            <div className="text-center py-8">
+          ) : filteredAnalyses.length === 0 ? (
+            <div className="py-8 text-center">
               <p className="text-slate-600">No sessions found</p>
               <p className="mt-2 text-sm text-slate-500">
-                Upload a video to get started
+                {subjectFilter !== "all" || dateFrom || dateTo
+                  ? "Try adjusting your filters"
+                  : "Upload a video to get started"}
               </p>
             </div>
           ) : (
@@ -271,17 +408,14 @@ export default function DashboardPage() {
                     <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Subject
                     </th>
-                    <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                      Language
-                    </th>
                     <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">
                       Clarity
                     </th>
                     <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">
-                      Confidence
+                      Engagement
                     </th>
                     <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">
-                      Engagement
+                      Confidence
                     </th>
                     <th className="pb-3 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">
                       Action
@@ -289,31 +423,28 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {analyses.map((analysis) => (
+                  {filteredAnalyses.map((analysis) => (
                     <tr
                       key={analysis.id}
-                      className="hover:bg-slate-50 transition"
+                      className="transition hover:bg-slate-50"
                     >
                       <td className="py-3 text-sm text-slate-600">
                         {formatDate(analysis.createdAt)}
                       </td>
-                      <td className="py-3 text-sm text-slate-900 font-medium">
+                      <td className="py-3 text-sm font-medium text-slate-900">
                         {analysis.topic}
                       </td>
                       <td className="py-3 text-sm text-slate-600">
                         {analysis.subject}
                       </td>
-                      <td className="py-3 text-sm text-slate-600">
-                        {analysis.language}
-                      </td>
-                      <td className="py-3 text-sm text-slate-900 text-right font-medium">
+                      <td className="py-3 text-right text-sm font-medium text-slate-900">
                         {analysis.clarityScore.toFixed(1)}
                       </td>
-                      <td className="py-3 text-sm text-slate-900 text-right font-medium">
-                        {analysis.confidenceScore.toFixed(1)}
-                      </td>
-                      <td className="py-3 text-sm text-slate-900 text-right font-medium">
+                      <td className="py-3 text-right text-sm font-medium text-slate-900">
                         {analysis.engagementScore.toFixed(1)}
+                      </td>
+                      <td className="py-3 text-right text-sm font-medium text-slate-900">
+                        {analysis.confidenceScore.toFixed(1)}
                       </td>
                       <td className="py-3 text-right">
                         <button

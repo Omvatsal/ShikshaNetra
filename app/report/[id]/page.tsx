@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getWithAuth } from "@/lib/utils/api";
+import { TimeSegments, TimeSegment } from "@/components/TimeSegments";
 
 interface Analysis {
   id: string;
@@ -39,6 +40,7 @@ export default function ReportPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     // Check if user is logged in
@@ -120,6 +122,80 @@ export default function ReportPage({ params }: { params: { id: string } }) {
     return "bg-rose-100";
   };
 
+  // Generate summary text based on scores
+  const generateSummary = () => {
+    if (!analysis) return "";
+    
+    const avgScore = (
+      analysis.clarityScore +
+      analysis.confidenceScore +
+      analysis.engagementScore +
+      analysis.technicalDepth
+    ) / 4;
+
+    let summary = `This teaching session on "${analysis.topic}" demonstrates `;
+    
+    if (avgScore >= 80) {
+      summary += "strong overall performance with excellent clarity, engagement, and technical depth. ";
+    } else if (avgScore >= 60) {
+      summary += "solid performance with room for improvement in certain areas. ";
+    } else {
+      summary += "areas that need attention, particularly in engagement and clarity. ";
+    }
+
+    if (analysis.coachStrengths && analysis.coachStrengths.length > 0) {
+      summary += `Key strengths include ${analysis.coachStrengths[0].toLowerCase()}. `;
+    }
+
+    if (analysis.coachSuggestions && analysis.coachSuggestions.length > 0) {
+      summary += `Focus areas for improvement: ${analysis.coachSuggestions[0].toLowerCase()}.`;
+    }
+
+    return summary;
+  };
+
+  // Generate time segments from analysis data
+  // In a real app, this would come from the API
+  const generateTimeSegments = (): TimeSegment[] => {
+    if (!analysis) return [];
+
+    const segments: TimeSegment[] = [];
+
+    // Example: Highlight segments based on engagement scores
+    // In production, this would come from time-series data
+    if (analysis.engagementScore >= 80) {
+      segments.push({
+        startTime: 0,
+        endTime: 120,
+        label: "High Engagement Opening",
+        type: "highlight",
+        description: "Strong student engagement and interaction during introduction",
+      });
+    }
+
+    if (analysis.clarityScore < 70) {
+      segments.push({
+        startTime: 300,
+        endTime: 420,
+        label: "Clarity Issue Detected",
+        type: "warning",
+        description: "Reduced clarity in explanation - consider slowing pace",
+      });
+    }
+
+    if (analysis.interactionIndex < 5) {
+      segments.push({
+        startTime: 600,
+        endTime: 720,
+        label: "Low Interaction Period",
+        type: "issue",
+        description: "Minimal student interaction - consider adding questions or activities",
+      });
+    }
+
+    return segments;
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -153,6 +229,76 @@ export default function ReportPage({ params }: { params: { id: string } }) {
               {formatDate(analysis.createdAt)}
             </p>
           </div>
+        </div>
+
+        {/* Summary Text */}
+        <Card className="mb-6 p-6 bg-gradient-to-br from-primary-50/50 to-accent-50/30 border-primary-200/50">
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">
+            Executive Summary
+          </h2>
+          <p className="text-sm leading-relaxed text-slate-700">
+            {generateSummary()}
+          </p>
+        </Card>
+
+        {/* Key Metrics */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="p-5 border-2 border-slate-200">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+              Clarity Score
+            </p>
+            <div className="flex items-baseline gap-2">
+              <p className={`text-4xl font-bold ${getScoreColor(analysis.clarityScore)}`}>
+                {analysis.clarityScore.toFixed(1)}
+              </p>
+              <span className="text-sm text-slate-500">/ 100</span>
+            </div>
+            <div className={`mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium ${getScoreBgColor(analysis.clarityScore)} ${getScoreColor(analysis.clarityScore)}`}>
+              {analysis.clarityScore >= 80 ? "Excellent" : analysis.clarityScore >= 60 ? "Good" : "Needs Improvement"}
+            </div>
+          </Card>
+          <Card className="p-5 border-2 border-slate-200">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+              Engagement Score
+            </p>
+            <div className="flex items-baseline gap-2">
+              <p className={`text-4xl font-bold ${getScoreColor(analysis.engagementScore)}`}>
+                {analysis.engagementScore.toFixed(1)}
+              </p>
+              <span className="text-sm text-slate-500">/ 100</span>
+            </div>
+            <div className={`mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium ${getScoreBgColor(analysis.engagementScore)} ${getScoreColor(analysis.engagementScore)}`}>
+              {analysis.engagementScore >= 80 ? "Excellent" : analysis.engagementScore >= 60 ? "Good" : "Needs Improvement"}
+            </div>
+          </Card>
+          <Card className="p-5 border-2 border-slate-200">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+              Confidence Score
+            </p>
+            <div className="flex items-baseline gap-2">
+              <p className={`text-4xl font-bold ${getScoreColor(analysis.confidenceScore)}`}>
+                {analysis.confidenceScore.toFixed(1)}
+              </p>
+              <span className="text-sm text-slate-500">/ 100</span>
+            </div>
+            <div className={`mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium ${getScoreBgColor(analysis.confidenceScore)} ${getScoreColor(analysis.confidenceScore)}`}>
+              {analysis.confidenceScore >= 80 ? "Excellent" : analysis.confidenceScore >= 60 ? "Good" : "Needs Improvement"}
+            </div>
+          </Card>
+          <Card className="p-5 border-2 border-slate-200">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+              Technical Depth
+            </p>
+            <div className="flex items-baseline gap-2">
+              <p className={`text-4xl font-bold ${getScoreColor(analysis.technicalDepth)}`}>
+                {analysis.technicalDepth.toFixed(1)}
+              </p>
+              <span className="text-sm text-slate-500">/ 100</span>
+            </div>
+            <div className={`mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium ${getScoreBgColor(analysis.technicalDepth)} ${getScoreColor(analysis.technicalDepth)}`}>
+              {analysis.technicalDepth >= 80 ? "Excellent" : analysis.technicalDepth >= 60 ? "Good" : "Needs Improvement"}
+            </div>
+          </Card>
         </div>
 
         {/* Session Info */}
@@ -190,82 +336,49 @@ export default function ReportPage({ params }: { params: { id: string } }) {
           </div>
         </Card>
 
-        {/* Video Player */}
-        {analysis.videoMetadata?.storagePath && (
-          <Card className="mb-6 p-6">
-            <h2 className="text-xl font-semibold text-slate-900 mb-4">
-              Session Recording
-            </h2>
-            {videoUrl ? (
-              <video
-                controls
-                className="w-full rounded-lg"
-                src={videoUrl}
-              >
-                Your browser does not support the video tag.
-              </video>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 bg-slate-50 rounded-lg">
-                <p className="text-slate-600 mb-4">Click to load video</p>
-                <button
-                  onClick={loadVideo}
-                  disabled={loadingVideo}
-                  className="btn-primary"
+        {/* Video Player and Time Segments */}
+        <div className="mb-6 grid gap-6 lg:grid-cols-[2fr,1fr]">
+          {analysis.videoMetadata?.storagePath && (
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold text-slate-900 mb-4">
+                Session Recording
+              </h2>
+              {videoUrl ? (
+                <video
+                  ref={videoRef}
+                  controls
+                  className="w-full rounded-lg shadow-lg"
+                  src={videoUrl}
                 >
-                  {loadingVideo ? "Loading..." : "Load Video"}
-                </button>
-              </div>
-            )}
-          </Card>
-        )}
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 bg-slate-50 rounded-lg">
+                  <p className="text-slate-600 mb-4">Click to load video</p>
+                  <button
+                    onClick={loadVideo}
+                    disabled={loadingVideo}
+                    className="btn-primary"
+                  >
+                    {loadingVideo ? "Loading..." : "Load Video"}
+                  </button>
+                </div>
+              )}
+            </Card>
+          )}
 
-        {/* Scores Overview */}
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Clarity Score
-            </p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <p className={`text-3xl font-bold ${getScoreColor(analysis.clarityScore)}`}>
-                {analysis.clarityScore.toFixed(1)}
-              </p>
-              <span className="text-sm text-slate-500">/ 100</span>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Confidence Score
-            </p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <p className={`text-3xl font-bold ${getScoreColor(analysis.confidenceScore)}`}>
-                {analysis.confidenceScore.toFixed(1)}
-              </p>
-              <span className="text-sm text-slate-500">/ 100</span>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Engagement Score
-            </p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <p className={`text-3xl font-bold ${getScoreColor(analysis.engagementScore)}`}>
-                {analysis.engagementScore.toFixed(1)}
-              </p>
-              <span className="text-sm text-slate-500">/ 100</span>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Technical Depth
-            </p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <p className={`text-3xl font-bold ${getScoreColor(analysis.technicalDepth)}`}>
-                {analysis.technicalDepth.toFixed(1)}
-              </p>
-              <span className="text-sm text-slate-500">/ 100</span>
-            </div>
+          {/* Highlighted Time Segments */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 mb-4">
+              Key Time Segments
+            </h2>
+            <TimeSegments
+              segments={generateTimeSegments()}
+              videoRef={videoRef}
+            />
           </Card>
         </div>
+
 
         {/* Additional Metrics */}
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
