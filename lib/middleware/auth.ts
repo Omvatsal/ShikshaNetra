@@ -34,7 +34,6 @@ export const authMiddleware = (req: NextRequest) => {
     return null;
   }
 
-  console.log("✅ Auth successful for user:", payload.id);
   return payload;
 };
 
