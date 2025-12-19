@@ -4,11 +4,11 @@ import { createAnalysis, updateAnalysis } from "@/lib/models/Analysis";
 import { uploadVideoToStorage } from "@/lib/utils/videoUpload";
 import { Client } from "@gradio/client";
 import { transformMLResponse } from "@/lib/services/analysisService";
-// Vercel pe background tasks ko zinda rakhne ke liye zaroori hai:
-import { waitUntil } from '@vercel/functions'; 
+export const runtime = "nodejs";
+
 
 const HF_SPACE = "genathon00/sikshanetra-model";
-export const maxDuration = 60; 
+export const maxDuration = 300; 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
