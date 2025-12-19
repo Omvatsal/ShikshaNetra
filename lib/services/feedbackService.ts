@@ -73,7 +73,7 @@ Analyze the session and generate a JSON report containing the following 8 distin
 
 **Important Guidelines:**
 - Address ${teacherName} by name or inclusive pronouns like you, yours etc. in the performance_summary to make it feel personal and human-driven.
-${isNewUser ? "- For new teachers, emphasize positive elements and future potential rather than comparing to previous sessions." : `- Reference their previous performance (e.g., "Building on your last session..." or "You've improved in..." or "Similar to before...") to demonstrate memory and continuity.`}
+${isNewUser ? "- For new teachers, emphasize positive elements and future potential rather than comparing to previous sessions." : `- Reference their previous performance (e.g., "Building on your last session..." or "You've improved in..." or "Similar to before...") to demonstrate memory and continuity. Mention how much improvement is there from previous sessions`}
 - Be constructive, supportive, and actionable in feedback.
 - Base all observations on the actual transcript and scores provided.
 - Ensure factual_accuracy_audit is thorough - verify concepts, definitions, and examples against the topic.

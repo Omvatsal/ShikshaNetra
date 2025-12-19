@@ -76,7 +76,9 @@ export default function HistoryPage() {
       filtered = filtered.filter((a) => new Date(a.createdAt) <= toDate);
     }
 
-    return filtered;
+    return filtered.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }, [analyses, subjectFilter, dateFrom, dateTo]);
 
   // Get unique subjects for filter
@@ -103,6 +105,10 @@ export default function HistoryPage() {
     
     const currentScore = (current.clarityScore + current.confidenceScore + current.engagementScore) / 3;
     const previousScore = (previous.clarityScore + previous.confidenceScore + previous.engagementScore) / 3;
+
+    if (previousScore <= 0) {
+      return { label: "→ --%", color: "bg-slate-100 text-slate-700", tooltip: "Baseline established" };
+    }
     
     const diff = currentScore - previousScore;
     const percentChange = ((diff / previousScore) * 100).toFixed(1);
@@ -245,7 +251,7 @@ export default function HistoryPage() {
                             title={growthTag.tooltip}
                             className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${growthTag.color}`}
                           >
-                            `{growthTag.label} from last session`
+                            {`${growthTag.label} from last session`}
                           </span>
                         )}
                       </div>

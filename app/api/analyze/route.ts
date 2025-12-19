@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     // HF_SPACE is configured inside the processor
 
-    // 3. Create job immediately
+    // 3. Create job FIRST with minimal metadata (don't wait for upload)
     const job = await createJob({
       userId: user.id,
       videoMetadata: {
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     console.log("Created job:", job.id);
 
     // 4. Start async processing (don't await)
-    // This runs in the background while we return the job to the frontend
+    // Processor will upload file and update job with storage metadata
     processVideoAnalysis(job.id, file, user.id, subject, language).catch(
       (error) => {
         console.error("Fatal error in background process:", error);
