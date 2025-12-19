@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIncompleteJobs, getJobById, updateJob } from "@/lib/models/Job";
 import type { JobResponse } from "@/lib/types/job";
 import { getSignedVideoUrl } from "@/lib/services/storageService";
-import { processVideoAnalysis } from "@/app/api/analyze/route";
+import { processVideoAnalysis } from "@/lib/services/videoAnalysisProcessor";
 
 const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY;
 

@@ -116,9 +116,15 @@ export async function POST(req: NextRequest) {
     // STEP 3: EXECUTE & RETURN IMMEDIATELY
     // ---------------------------------------------------------
     
-    // Agar Vercel pe ho, to waitUntil use karo taaki request close hone ke baad bhi task chale
-    // Agar local (Node.js) pe ho, to sirf backgroundTask() call kar sakte ho.
-    waitUntil(backgroundTask());
+    // Try to use Edge-style waitUntil when available; otherwise detach with setTimeout
+    const maybeReqAny = req as unknown as { waitUntil?: (p: Promise<any>) => void };
+    if (typeof maybeReqAny.waitUntil === "function") {
+      maybeReqAny.waitUntil(backgroundTask());
+    } else {
+      setTimeout(() => {
+        backgroundTask().catch((e) => console.error("Background task error:", e));
+      }, 0);
+    }
 
     // Frontend ko turant job ID return kar do
     return NextResponse.json({

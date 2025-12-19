@@ -112,7 +112,7 @@ export function MetricsRadarChart({ data, label = "Current Session" }: MetricsRa
         padding: 12,
         titleFont: {
           size: 13,
-          weight: "600" as const,
+          weight: 600,
         },
         bodyFont: {
           size: 12,
