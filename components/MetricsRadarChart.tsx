@@ -89,7 +89,7 @@ export function MetricsRadarChart({ data, label = "Current Session" }: MetricsRa
         pointLabels: {
           font: {
             size: 12,
-            weight: "600" as const,
+            weight: 600,
           },
           color: "rgb(51, 65, 85)",
         },

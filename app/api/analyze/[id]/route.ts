@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     // Auth Check
-    const user = await authMiddleware(req);
+    const user = authMiddleware(req);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -86,7 +86,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await authMiddleware(req);
+    const user = authMiddleware(req);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

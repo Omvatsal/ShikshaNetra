@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastContext";
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
   const { showToast } = useToast();
@@ -17,6 +18,7 @@ export function Navbar() {
       const token = localStorage.getItem("shikshanetra_token");
       const loggedIn = localStorage.getItem("shikshanetra_logged_in") === "true";
       setIsLoggedIn(!!token || loggedIn);
+      setIsLoading(false);
     };
     checkLogin();
     window.addEventListener("storage", checkLogin);
@@ -38,19 +40,29 @@ export function Navbar() {
 
   const authenticatedNavLinks = [
     { href: "/upload", label: "Upload" },
-    { href: "/", label: "Home" },
+    { href: "/dashboard", label: "Dashboard" },
     { href: "/history", label: "History" },
     { href: "/insights", label: "Insights" },
   ];
+
+  // Don't render navbar while loading to avoid flash
+  if (isLoading) {
+    return null;
+  }
+
+  // Only render navbar if user is logged in
+  if (!isLoggedIn) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-40">
       <nav className="border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:py-3.5">
-          {/* Logo - Always visible, always links to home page */}
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <Link 
-              href="/" 
+              href="/dashboard" 
               className="flex items-center gap-2"
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-600 text-sm font-bold text-white shadow-sm">
@@ -64,39 +76,26 @@ export function Navbar() {
 
           {/* Desktop Navigation */}
           <div className="hidden items-center gap-6 md:flex">
-            {isLoggedIn ? (
-              <>
-                {authenticatedNavLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`text-sm font-medium transition ${
-                      pathname === link.href
-                        ? "text-primary-700"
-                        : "text-slate-700 hover:text-primary-700"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-                <button
-                  onClick={handleLogout}
-                  className="rounded-lg border border-rose-300 bg-white px-4 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
+            {authenticatedNavLinks.map((link) => (
               <Link
-                href="/login"
-                className="btn-primary text-sm px-4 py-1.5"
+                key={link.href}
+                href={link.href}
+                className={`text-sm font-medium transition ${
+                  pathname === link.href
+                    ? "text-primary-700"
+                    : "text-slate-700 hover:text-primary-700"
+                }`}
               >
-                Login
+                {link.label}
               </Link>
-            )}
+            ))}
+            <button
+              onClick={handleLogout}
+              className="rounded-lg border border-rose-300 bg-white px-4 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
+            >
+              Logout
+            </button>
           </div>
-
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setOpen((o) => !o)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"

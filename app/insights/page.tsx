@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getWithAuth } from "@/lib/utils/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
+import { MemoryInsights } from "@/components/MemoryInsights";
+import type { MemoryResponse, WeaknessField } from "@/lib/types/memory";
+
+export const dynamic = "force-dynamic";
 
 export default function InsightsPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [memory, setMemory] = useState<MemoryResponse | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("shikshanetra_token");
@@ -24,7 +31,64 @@ export default function InsightsPage() {
     
     setIsAuthenticated(true);
     setLoading(false);
+    
+    // Fetch memory data
+    fetchMemory();
   }, [router, showToast]);
+
+  const fetchMemory = async () => {
+    setMemoryLoading(true);
+    try {
+      const response = await getWithAuth("/api/memory/my-summary");
+
+      if (!response.ok) {
+        console.error("Failed to fetch memory");
+        setMemoryLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && data.memory) {
+        setMemory(data.memory);
+      }
+    } catch (error) {
+      console.error("Error fetching memory:", error);
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const getMetricColor = (score: number): string => {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-blue-600";
+    if (score >= 40) return "text-yellow-600";
+    return "text-red-600";
+  };
+
+  const getMetricBgColor = (score: number): string => {
+    if (score >= 80) return "bg-green-50";
+    if (score >= 60) return "bg-blue-50";
+    if (score >= 40) return "bg-yellow-50";
+    return "bg-red-50";
+  };
+
+  const renderMetricCard = (label: string, metric: any) => (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+        {label}
+      </p>
+      <p className={`mt-2 text-2xl font-bold ${getMetricColor(metric.mean)}`}>
+        {metric.mean.toFixed(1)}
+      </p>
+      <div className="mt-2 space-y-1 text-xs text-slate-600">
+        <p>Latest: {metric.latest.toFixed(1)}</p>
+        <p>Range: {metric.min.toFixed(1)} - {metric.max.toFixed(1)}</p>
+        <p className={metric.trend > 0 ? "text-green-600" : metric.trend < 0 ? "text-red-600" : ""}>
+          Trend: {metric.trend > 0 ? "↑" : metric.trend < 0 ? "↓" : "→"} {Math.abs(metric.trend).toFixed(1)}
+        </p>
+      </div>
+    </div>
+  );
 
   if (loading || !isAuthenticated) {
     return (
@@ -40,100 +104,27 @@ export default function InsightsPage() {
     );
   }
 
+  if (!memory) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 pb-12 pt-8 sm:pt-10">
+        <PageHeader
+          title="Insights & Analytics"
+          subtitle="High-level overview of your teaching performance and trends"
+        />
+        
+        <MemoryInsights memory={null} loading={false} />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-8 sm:pt-10">
       <PageHeader
         title="Insights & Analytics"
-        subtitle="High-level overview of your teaching performance and trends"
+        subtitle={`Your teaching profile from ${memory.totalSessions} session${memory.totalSessions !== 1 ? "s" : ""}`}
       />
 
-      {/* Overview Section */}
-      <section className="mb-8">
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
-            Performance Overview
-          </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Overall Performance
-              </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                Coming Soon
-              </p>
-              <p className="mt-1 text-xs text-slate-600">
-                Aggregate metrics across all sessions
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Trend Analysis
-              </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                Coming Soon
-              </p>
-              <p className="mt-1 text-xs text-slate-600">
-                Performance trends over time
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Key Insights
-              </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                Coming Soon
-              </p>
-              <p className="mt-1 text-xs text-slate-600">
-                AI-generated insights and recommendations
-              </p>
-            </div>
-          </div>
-        </Card>
-      </section>
-
-      {/* Charts Section */}
-      <section className="mb-8 grid gap-6 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
-            Performance Trends
-          </h2>
-          <div className="flex h-64 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
-            <p className="text-sm text-slate-500">
-              Chart visualization coming soon
-            </p>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
-            Metric Distribution
-          </h2>
-          <div className="flex h-64 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
-            <p className="text-sm text-slate-500">
-              Chart visualization coming soon
-            </p>
-          </div>
-        </Card>
-      </section>
-
-      {/* Recommendations Section */}
-      <section>
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
-            Recommendations
-          </h2>
-          <div className="space-y-3">
-            <div className="rounded-lg border border-primary-200 bg-primary-50 p-4">
-              <p className="text-sm font-medium text-primary-900">
-                Analysis in progress
-              </p>
-              <p className="mt-1 text-xs text-primary-700">
-                Detailed insights and recommendations will be available here once you have analyzed multiple sessions.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </section>
+      <MemoryInsights memory={memory} loading={false} />
     </div>
   );
 }

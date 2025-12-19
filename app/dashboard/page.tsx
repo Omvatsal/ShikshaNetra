@@ -31,6 +31,14 @@ interface Analysis {
   topicRelevanceScore?: number;
 }
 
+/**
+ * Normalize interaction index to 0-100 range
+ * ML model returns values that may be > 100, so we clamp them
+ */
+const normalizeInteractionIndex = (value: number = 0): number => {
+  return Math.min(Math.max(value, 0), 100);
+};
+
 export default function DashboardPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -137,7 +145,7 @@ export default function DashboardPage() {
         confidence: acc.confidence + a.confidenceScore,
         engagement: acc.engagement + a.engagementScore,
         technicalDepth: acc.technicalDepth + a.technicalDepth,
-        interaction: acc.interaction + (a.interactionIndex || 0) * 10,
+        interaction: acc.interaction + normalizeInteractionIndex(a.interactionIndex),
         topicRelevance: acc.topicRelevance + (a.topicRelevanceScore || 0),
       }),
       {
@@ -186,12 +194,12 @@ export default function DashboardPage() {
       prev: {
         engagement: prev.engagementScore,
         clarity: prev.clarityScore,
-        interaction: (prev.interactionIndex || 0) * 10,
+        interaction: normalizeInteractionIndex(prev.interactionIndex),
       },
       curr: {
         engagement: curr.engagementScore,
         clarity: curr.clarityScore,
-        interaction: (curr.interactionIndex || 0) * 10,
+        interaction: normalizeInteractionIndex(curr.interactionIndex),
       },
     };
   }, [filteredAnalyses]);
@@ -353,17 +361,8 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Session Comparison */}
-        {comparisonData && (
-          <div className="mb-6">
-            <MetricsComparisonCard
-              prev={comparisonData.prev}
-              curr={comparisonData.curr}
-              title="Latest Session Comparison"
-            />
-          </div>
-        )}
-
+        {/* Session Comparison - REMOVED */}
+        
         {/* Session History Table */}
         <Card className="p-6">
           <h2 className="mb-4 text-lg font-semibold text-slate-900">

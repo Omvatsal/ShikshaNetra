@@ -18,19 +18,49 @@ export interface ProcessingStatus {
   overall: ComponentStatus; // "completed" only when ALL 3 are done
 }
 
-// --- ML RESPONSE STRUCTURES ---
-export interface AudioScores {
+// --- ML RESPONSE STRUCTURES (Updated for new API format) ---
+
+// Per-minute audio scores
+export interface AudioPerMinute {
+  minute: number;
+  start_sec: number;
+  end_sec: number;
   clarity_score: number;
   confidence_score: number;
-  features?: number[];
+}
+
+export interface AudioOverall {
+  clarity_score: number;
+  confidence_score: number;
+}
+
+export interface AudioScores {
+  per_minute: AudioPerMinute[];
+  overall: AudioOverall;
+}
+
+// Per-minute video scores
+export interface VideoPerMinute {
+  minute: number;
+  engagement_score: number;
+  gesture_index: number;
+  dominant_emotion: string;
+  confidence_score: number;
+}
+
+export interface VideoOverall {
+  engagement_score: number;
+  gesture_index: number;
+  confidence_score: number;
+  dominant_emotion: string;
 }
 
 export interface VideoScores {
-  engagement_score: number;
-  gesture_index: number;
-  dominant_emotion?: string;
+  per_minute: VideoPerMinute[];
+  overall: VideoOverall;
 }
 
+// Topic relevance
 export interface TopicMatches {
   [key: string]: number;
 }
@@ -52,11 +82,33 @@ export interface Scores {
   text: TextScores;
 }
 
+// Teaching style for coach feedback
+export interface TeachingStyle {
+  style: string;
+  explanation: string;
+}
+
+// Content metadata for coach feedback
+export interface ContentMetadata {
+  titles: string[];
+  hashtags: string[];
+}
+
+// Enhanced coach feedback with all features
 export interface CoachFeedback {
-  performance_summary?: string;
-  strengths?: string[];
-  improvements?: string[];
+  performance_summary: string;
+  teaching_style: TeachingStyle;
+  strengths: string[];
+  weaknesses: string[];
+  factual_accuracy_audit: string[];
+  content_metadata: ContentMetadata;
+  multilingual_feedback?: string | null;
   error?: string;
+}
+
+// Metadata from ML response
+export interface MLMetadata {
+  processing_time_sec: number;
 }
 
 export interface MLResponse {
@@ -66,7 +118,8 @@ export interface MLResponse {
     topic: string;
     transcript: string;
     scores: Scores;
-    coach_feedback?: CoachFeedback;
+    metadata?: MLMetadata;
+    coach_feedback?: CoachFeedback; // Will be added after separate GenAI call
   };
   error?: string | null;
 }
@@ -86,15 +139,17 @@ export interface Analysis {
   topic?: string;
   transcript?: string;
   
-  // Audio scores
+  // Audio scores (overall)
   clarityScore?: number;
   confidenceScore?: number;
-  audioFeatures?: number[];
+  audioPerMinute?: AudioPerMinute[]; // Store per-minute audio data
   
-  // Video scores
+  // Video scores (overall)
   engagementScore?: number;
   gestureIndex?: number;
   dominantEmotion?: string;
+  videoConfidenceScore?: number; // Video-specific confidence
+  videoPerMinute?: VideoPerMinute[]; // Store per-minute video data
   
   // Text scores
   technicalDepth?: number;
@@ -102,10 +157,9 @@ export interface Analysis {
   topicMatches?: TopicMatches;
   topicRelevanceScore?: number;
   
-  // Coach feedback
+  // Coach feedback (enhanced)
+  coachFeedback?: CoachFeedback;
   coachFeedbackError?: string;
-  coachSuggestions?: string[];
-  coachStrengths?: string[];
   
   // Original ML response
   mlResponse?: MLResponse;
@@ -142,18 +196,19 @@ export interface CreateAnalysisInput {
   // Scores (Optional initially)
   clarityScore?: number;
   confidenceScore?: number;
-  audioFeatures?: number[];
+  audioPerMinute?: AudioPerMinute[];
   engagementScore?: number;
   gestureIndex?: number;
   dominantEmotion?: string;
+  videoConfidenceScore?: number;
+  videoPerMinute?: VideoPerMinute[];
   technicalDepth?: number;
   interactionIndex?: number;
   topicMatches?: TopicMatches;
   topicRelevanceScore?: number;
   
+  coachFeedback?: CoachFeedback;
   coachFeedbackError?: string;
-  coachSuggestions?: string[];
-  coachStrengths?: string[];
   mlResponse?: MLResponse;
   
   processingStatus?: Partial<ProcessingStatus>;
@@ -175,18 +230,19 @@ export interface UpdateAnalysisInput {
   // Scores
   clarityScore?: number;
   confidenceScore?: number;
-  audioFeatures?: number[];
+  audioPerMinute?: AudioPerMinute[];
   engagementScore?: number;
   gestureIndex?: number;
   dominantEmotion?: string;
+  videoConfidenceScore?: number;
+  videoPerMinute?: VideoPerMinute[];
   technicalDepth?: number;
   interactionIndex?: number;
   topicMatches?: TopicMatches;
   topicRelevanceScore?: number;
   
+  coachFeedback?: CoachFeedback;
   coachFeedbackError?: string;
-  coachSuggestions?: string[];
-  coachStrengths?: string[];
   mlResponse?: MLResponse;
   
   processingStatus?: Partial<ProcessingStatus>;

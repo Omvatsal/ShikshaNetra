@@ -7,6 +7,7 @@ export interface User {
   password: string;
   name: string;
   role: "mentor" | "coordinator";
+  institutionId?: string; // optional institution reference
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -20,6 +21,7 @@ export interface CreateUserInput {
   password: string;
   name: string;
   role: "mentor" | "coordinator";
+  institutionId?: string;
 }
 
 export interface UpdateUserInput {
@@ -27,4 +29,5 @@ export interface UpdateUserInput {
   name?: string;
   role?: "mentor" | "coordinator";
   password?: string;
+  institutionId?: string | null;
 }

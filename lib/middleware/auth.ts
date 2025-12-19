@@ -13,7 +13,10 @@ export const authMiddleware = (req: NextRequest) => {
   const authHeader = req.headers.get("authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("Auth failed: No authorization header or invalid format");
+    console.log("Auth failed: No authorization header or invalid format", {
+      hasHeader: !!authHeader,
+      headerValue: authHeader?.substring(0, 20),
+    });
     return null;
   }
 
@@ -31,6 +34,7 @@ export const authMiddleware = (req: NextRequest) => {
     return null;
   }
 
+  console.log("✅ Auth successful for user:", payload.id);
   return payload;
 };
 

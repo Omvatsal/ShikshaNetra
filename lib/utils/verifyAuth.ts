@@ -9,7 +9,7 @@ export async function verifyAuth(req: NextRequest) {
   }
 
   // 2. Check for User Session (Human-to-Server)
-  const user = await authMiddleware(req);
+  const user = authMiddleware(req);
   if (user) {
     return { isAuthorized: true, type: "user", user };
   }

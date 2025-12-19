@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
@@ -53,6 +53,8 @@ export default function DemoPage() {
   const [fileObject, setFileObject] = useState<File | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
   const [coordinatorAnalyses, setCoordinatorAnalyses] = useState<CoordinatorAnalysis[]>([]);
   const [coordinatorLoading, setCoordinatorLoading] = useState(false);
 
@@ -99,6 +101,7 @@ export default function DemoPage() {
     }
 
     setLoading(true);
+    let scheduledJobId: string | null = null;
     
     try {
       const formData = new FormData();
@@ -119,24 +122,85 @@ export default function DemoPage() {
         throw new Error(result.error || "Analysis failed");
       }
 
-      // Fetch the saved analysis details
-      const analysisResponse = await getWithAuth(`/api/analyze/${result.analysisId}`);
-
-      if (analysisResponse.ok) {
-        const analysisData = await analysisResponse.json();
-        setAnalysisResult(analysisData.analysis);
-        setEvaluated(true);
-        showToast("Analysis completed successfully!");
-      } else {
-        throw new Error("Failed to fetch analysis results");
+      const jobId: string | undefined = result.job?.id;
+      if (!jobId) {
+        throw new Error("Job was not returned from server");
       }
+
+      scheduledJobId = jobId;
+
+      setActiveJobId(jobId);
+      setEvaluated(false);
+      showToast("Job scheduled. Waiting for completion…");
+
+      // Poll job status until completed, then fetch the analysis
+      const poll = async () => {
+        const jobRes = await getWithAuth(`/api/jobs/${jobId}`);
+        if (!jobRes.ok) return;
+        const jobData = await jobRes.json();
+        const job = jobData.job;
+        if (!job) return;
+
+        if (job.status === "failed") {
+          throw new Error(job.error || "Analysis failed");
+        }
+
+        if (job.status === "completed" && job.analysisId) {
+          const analysisResponse = await getWithAuth(`/api/analyze/${job.analysisId}`);
+          if (!analysisResponse.ok) {
+            throw new Error("Failed to fetch analysis results");
+          }
+          const analysisData = await analysisResponse.json();
+          setAnalysisResult(analysisData.analysis);
+          setEvaluated(true);
+          showToast("Analysis completed successfully!");
+          setLoading(false);
+          if (pollTimerRef.current) {
+            window.clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+        }
+      };
+
+      // Clear any existing poll timer and start a new one
+      if (pollTimerRef.current) {
+        window.clearInterval(pollTimerRef.current);
+      }
+      pollTimerRef.current = window.setInterval(() => {
+        poll().catch((e) => {
+          console.error("Job polling error:", e);
+          showToast(e instanceof Error ? e.message : "Job polling failed");
+          setLoading(false);
+          if (pollTimerRef.current) {
+            window.clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+        });
+      }, 2500);
+
+      // Run an immediate poll so UI updates faster
+      await poll();
     } catch (error) {
       console.error("Error during analysis:", error);
       showToast(error instanceof Error ? error.message : "Error during analysis. Please try again.");
-    } finally {
       setLoading(false);
+    } finally {
+      // If scheduling failed, stop loading here. If a job was scheduled,
+      // polling/completion will stop loading.
+      if (!scheduledJobId) {
+        setLoading(false);
+      }
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        window.clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

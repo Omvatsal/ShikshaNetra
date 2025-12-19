@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     // 1. Authenticate
-    const user = await authMiddleware(req);
+    const user = authMiddleware(req);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const formData = await req.formData();

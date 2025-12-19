@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { useToast } from "@/components/ToastContext";
 import { getWithAuth, postWithAuth } from "@/lib/utils/api";
+import { VideoUploadZone } from "@/components/VideoUploadZone";
+import { EnhancedJobTracker } from "@/components/EnhancedJobTracker";
 
 type AnalysisResult = {
   id: string;
@@ -36,6 +38,36 @@ export default function UploadPage() {
   const [fileObject, setFileObject] = useState<File | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  type JobStatus =
+    | "created"
+    | "uploading"
+    | "uploaded"
+    | "analyzing"
+    | "analysis_done"
+    | "generating_feedback"
+    | "completed"
+    | "failed";
+
+  type JobItem = {
+    id: string;
+    status: JobStatus;
+    progress: number;
+    analysisId?: string;
+    error?: string;
+    videoMetadata?: { fileName?: string };
+    subject?: string;
+    language?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+
+  const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const prevJobsRef = useRef<Map<string, JobStatus>>(new Map());
+  const [expandedJobIds, setExpandedJobIds] = useState<Record<string, boolean>>({});
+  const [messageTick, setMessageTick] = useState(0);
 
   useEffect(() => {
     // Check authentication
@@ -48,6 +80,126 @@ export default function UploadPage() {
     }
     setIsAuthenticated(true);
   }, [router, showToast]);
+
+  const refreshJobs = async (silent: boolean = true) => {
+    if (!isAuthenticated) return;
+    if (!silent) setJobsLoading(true);
+    try {
+      const res = await getWithAuth("/api/jobs?limit=5");
+      if (!res.ok) return;
+      const data = await res.json();
+      const nextJobs: JobItem[] = (data.jobs || []) as JobItem[];
+
+      // Detect newly completed jobs
+      const prev = prevJobsRef.current;
+      for (const job of nextJobs) {
+        const prevStatus = prev.get(job.id);
+        if (prevStatus && prevStatus !== "completed" && job.status === "completed") {
+          showToast("Job completed! You can open the report.");
+        }
+        prev.set(job.id, job.status);
+      }
+
+      setJobs(nextJobs);
+    } catch {
+      // ignore polling errors
+    } finally {
+      if (!silent) setJobsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    refreshJobs(false);
+    const id = window.setInterval(() => {
+      refreshJobs(true);
+    }, 3000);
+
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
+  const pendingJobs = useMemo(
+    () => jobs.filter((j) => j.status !== "completed" && j.status !== "failed"),
+    [jobs]
+  );
+
+  const completedJobs = useMemo(
+    () => jobs.filter((j) => j.status === "completed"),
+    [jobs]
+  );
+
+  const failedJobs = useMemo(
+    () => jobs.filter((j) => j.status === "failed"),
+    [jobs]
+  );
+
+  const hasExpandedPending = useMemo(
+    () => pendingJobs.some((j) => expandedJobIds[j.id]),
+    [pendingJobs, expandedJobIds]
+  );
+
+  useEffect(() => {
+    if (!hasExpandedPending) return;
+    const id = window.setInterval(() => {
+      setMessageTick((t) => t + 1);
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [hasExpandedPending]);
+
+  const toggleJobExpanded = (jobId: string) => {
+    setExpandedJobIds((prev) => ({
+      ...prev,
+      [jobId]: !prev[jobId],
+    }));
+  };
+
+  const getRotatingMessage = (job: JobItem) => {
+    const status = job.status;
+
+    const messagesByStatus: Record<JobStatus, string[]> = {
+      created: [
+        "Job created. Preparing uploads…",
+        "Warming up the pipeline…",
+      ],
+      uploading: [
+        "Upload started. Sending your video securely…",
+        "Uploading video to storage…",
+        "Optimizing upload—this may take a moment…",
+      ],
+      uploaded: [
+        "Upload complete. Preparing analysis…",
+        "Video received. Initializing model…",
+      ],
+      analyzing: [
+        "Analysis running. Processing video signals…",
+        "Analyzing audio clarity and confidence…",
+        "Analyzing text / transcript features…",
+        "Computing classroom engagement metrics…",
+      ],
+      analysis_done: [
+        "Core analysis complete. Finalizing outputs…",
+        "Scoring complete. Preparing feedback…",
+      ],
+      generating_feedback: [
+        "Generating coach feedback…",
+        "Drafting strengths and improvement areas…",
+        "Packaging your report—almost there…",
+      ],
+      completed: ["Completed."],
+      failed: ["Failed."],
+    };
+
+    const messages = messagesByStatus[status] || ["Working…"]; 
+
+    // Spread message selection across jobs so they don't all change to the same line at once
+    const salt = job.id
+      .split("")
+      .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const idx = Math.abs(messageTick + salt) % messages.length;
+    return messages[idx];
+  };
 
   const handleRunAnalysis = async () => {
     if (loading) return;
@@ -78,19 +230,24 @@ export default function UploadPage() {
         throw new Error(result.error || "Analysis failed");
       }
 
-      // Fetch the saved analysis details
-      const analysisResponse = await getWithAuth(`/api/analyze/${result.analysisId}`);
-
-      if (analysisResponse.ok) {
-        const analysisData = await analysisResponse.json();
-        setAnalysisResult(analysisData.analysis);
-        showToast("Analysis completed successfully! Redirecting to report...");
-        setTimeout(() => {
-          router.push(`/report/${result.analysisId}`);
-        }, 2000);
-      } else {
-        throw new Error("Failed to fetch analysis results");
+      const job: JobItem | undefined = result.job;
+      if (!job?.id) {
+        throw new Error("Job was not returned from server");
       }
+
+      showToast("Job scheduled. You can upload another video.");
+      setJobs((prev) => [job, ...prev]);
+
+      // Reset upload controls so user can schedule multiple jobs
+      setFileObject(null);
+      setFileName(null);
+      setAnalysisResult(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      // Kick a refresh so sidebar gets latest status quickly
+      refreshJobs(true);
     } catch (error) {
       console.error("Error during analysis:", error);
       showToast(error instanceof Error ? error.message : "Error during analysis. Please try again.");
@@ -121,87 +278,39 @@ export default function UploadPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
         {/* Upload Panel */}
-        <Card className="p-5">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Video Upload
-          </h2>
-          <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-            Upload a teaching session video for AI analysis.
-          </p>
-
-          {/* Upload */}
-          <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500 transition hover:border-primary-300 hover:bg-primary-50/60 sm:text-sm">
-            <input
-              type="file"
-              className="hidden"
-              accept="video/*"
-              onChange={handleFileChange}
-            />
-            <span className="mb-1 font-medium text-slate-700">
-              Drop your lecture video here or click to upload.
-            </span>
-            <span className="text-[11px]">
-              MP4, MKV, or WebM — 5–60 minutes, classroom or virtual sessions.
-            </span>
-            {fileName && (
-              <span className="mt-2 rounded-full bg-white px-3 py-1 text-[11px] text-primary-700">
-                Selected: {fileName}
-              </span>
-            )}
-          </label>
-
-          {/* Form */}
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 text-xs sm:text-sm">
-              <label className="block text-xs font-medium text-slate-700">
-                Subject
-              </label>
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 sm:text-sm"
-              >
-                <option>Data Structures</option>
-                <option>AI</option>
-                <option>DBMS</option>
-                <option>OS</option>
-                <option>Algorithms</option>
-              </select>
-            </div>
-            <div className="space-y-1.5 text-xs sm:text-sm">
-              <label className="block text-xs font-medium text-slate-700">
-                Language / Accent
-              </label>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 sm:text-sm"
-              >
-                <option>English – Indian</option>
-                <option>English – Neutral</option>
-                <option>English – US</option>
-                <option>Other</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleRunAnalysis}
-              disabled={loading || !fileObject}
-              className="btn-primary px-5 py-2 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Analyzing Video…" : "Start Analysis"}
-            </button>
-            <p className="text-[11px] text-slate-500">
-              Analysis may take a few minutes to complete.
-            </p>
-          </div>
-        </Card>
+        <VideoUploadZone 
+          fileName={fileName}
+          subject={subject}
+          language={language}
+          loading={loading}
+          onFileSelect={(file) => {
+            setFileName(file.name);
+            setFileObject(file);
+            setAnalysisResult(null);
+          }}
+          onSubjectChange={(value) => setSubject(value)}
+          onLanguageChange={(value) => setLanguage(value)}
+          onUpload={handleRunAnalysis}
+          onRemoveFile={() => {
+            setFileObject(null);
+            setFileName(null);
+            setAnalysisResult(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+            }
+          }}
+        />
 
         {/* Info Panel */}
         <div className="space-y-4">
+          <EnhancedJobTracker 
+            jobs={jobs}
+            expandedJobIds={expandedJobIds}
+            onToggleExpand={toggleJobExpanded}
+            messageTick={messageTick}
+            getRotatingMessage={getRotatingMessage}
+          />
+
           <Card className="p-5">
             <h3 className="text-sm font-semibold text-slate-900 mb-3">
               What You'll Get
@@ -225,17 +334,6 @@ export default function UploadPage() {
               </li>
             </ul>
           </Card>
-
-          {analysisResult && (
-            <Card className="p-5 bg-emerald-50 border-emerald-200">
-              <h3 className="text-sm font-semibold text-emerald-900 mb-2">
-                Analysis Started
-              </h3>
-              <p className="text-xs text-emerald-700">
-                Your video is being analyzed. You'll be redirected to the detailed report shortly.
-              </p>
-            </Card>
-          )}
         </div>
       </div>
     </div>

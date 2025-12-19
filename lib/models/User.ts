@@ -21,6 +21,7 @@ export async function createUser(userData: CreateUserInput): Promise<UserRespons
     email: user.email,
     name: user.name,
     role: user.role,
+    institutionId: user.institutionId,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -40,6 +41,7 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     password: user.password,
     name: user.name,
     role: user.role,
+    institutionId: user.institutionId,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   } as User;
@@ -66,6 +68,7 @@ export async function getUserById(id: string): Promise<User | null> {
     password: user.password,
     name: user.name,
     role: user.role,
+    institutionId: user.institutionId,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   } as User;
@@ -97,6 +100,7 @@ export async function updateUser(id: string, updates: UpdateUserInput): Promise<
     password: updated.password,
     name: updated.name,
     role: updated.role,
+    institutionId: updated.institutionId,
     createdAt: updated.createdAt,
     updatedAt: updated.updatedAt,
   } as User;

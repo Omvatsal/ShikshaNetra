@@ -1,6 +1,66 @@
 import gradio as gr
 import os
+import json
+from flask import Flask, request, jsonify
 from src.pipeline import process_session
+from src.genai.coach import ShikshaCoach
+
+# Initialize Flask app for API endpoints
+flask_app = Flask(__name__)
+
+# Initialize the coach
+coach = ShikshaCoach()
+
+@flask_app.route("/generate_genai_feedback", methods=["POST"])
+def generate_genai_feedback():
+    """
+    API endpoint to generate GenAI feedback from a user prompt
+    Expects: { "user_prompt": "..." }
+    Returns: JSON feedback object
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or "user_prompt" not in data:
+            return jsonify({"error": "Missing 'user_prompt' in request body"}), 400
+        
+        user_prompt = data["user_prompt"]
+        
+        if not coach.model:
+            return jsonify({"error": "GenAI model not initialized. Check GEMINI_API_KEY."}), 500
+        
+        # Generate response using the coach model
+        response = coach.model.generate_content(user_prompt)
+        
+        # Extract text and parse JSON
+        response_text = response.text.strip()
+        
+        # Remove markdown code blocks if present
+        if response_text.startswith("```json"):
+            response_text = response_text[7:]
+        if response_text.startswith("```"):
+            response_text = response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3]
+        
+        response_text = response_text.strip()
+        
+        # Parse JSON
+        feedback = json.loads(response_text)
+        
+        return jsonify(feedback), 200
+        
+    except json.JSONDecodeError as e:
+        return jsonify({
+            "error": "Failed to parse GenAI response as JSON",
+            "details": str(e),
+            "raw_response": response_text if 'response_text' in locals() else None
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to generate feedback",
+            "details": str(e)
+        }), 500
 
 def analyze_session(video):
     if not video:
@@ -101,4 +161,17 @@ with gr.Blocks(title="Shiksha Netra - AI Pedagogical Coach") as demo:
     )
 
 if __name__ == "__main__":
+    # Launch both Gradio and Flask
+    # Gradio will be on port 7860 by default
+    # Flask will be on port 5000 by default
+    from threading import Thread
+    
+    # Start Flask in a separate thread
+    def run_flask():
+        flask_app.run(host="0.0.0.0", port=5000, debug=False)
+    
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Launch Gradio
     demo.launch()

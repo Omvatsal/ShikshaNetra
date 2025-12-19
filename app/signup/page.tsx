@@ -32,7 +32,7 @@ export default function SignupPage() {
     }
   }, [router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError("");
     const nextErrors: typeof errors = {};
@@ -46,13 +46,44 @@ export default function SignupPage() {
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    // TODO: Replace demo signup with real signup API call and persistence
-    localStorage.setItem("shikshanetra_logged_in", "true");
-    localStorage.setItem("shikshanetra_token", "demo_token");
-    showToast("Account created successfully! Redirecting...");
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+
+    try {
+      // Call the signup API
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          name: fullName,
+          email,
+          password,
+          role,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        setApiError(error.error || "Signup failed. Please try again.");
+        return;
+      }
+
+      const data = await response.json();
+
+      // Store tokens and user info
+      localStorage.setItem("shikshanetra_token", data.accessToken);
+      localStorage.setItem("shikshanetra_user", JSON.stringify(data.user));
+      localStorage.setItem("shikshanetra_logged_in", "true");
+
+      showToast("Account created successfully! Redirecting...");
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 500);
+    } catch (error) {
+      console.error("Signup error:", error);
+      setApiError(error instanceof Error ? error.message : "An error occurred. Please try again.");
+    }
   };
 
   return (

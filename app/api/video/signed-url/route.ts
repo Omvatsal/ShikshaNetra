@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // 2. Await Auth: Best practice for future-proofing
-    const user = await authMiddleware(req);
+    const user = authMiddleware(req);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized - Invalid or missing token' },

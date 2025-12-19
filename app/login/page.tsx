@@ -24,7 +24,7 @@ export default function LoginPage() {
     }
   }, [router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError("");
     const nextErrors: typeof errors = {};
@@ -32,14 +32,39 @@ export default function LoginPage() {
     if (!password) nextErrors.password = "Password is required.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    // TODO: Replace demo auth with real authentication API call
-    localStorage.setItem("shikshanetra_logged_in", "true");
-    localStorage.setItem("shikshanetra_token", "demo_token");
-    document.cookie = "shikshanetra_logged_in=true; path=/; max-age=604800";
-    showToast("Login successful. Redirecting...");
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+
+    try {
+      // Call the authentication API
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        setApiError(error.error || "Login failed. Please try again.");
+        return;
+      }
+
+      const data = await response.json();
+
+      // Store tokens and user info
+      localStorage.setItem("shikshanetra_token", data.accessToken);
+      localStorage.setItem("shikshanetra_user", JSON.stringify(data.user));
+      localStorage.setItem("shikshanetra_logged_in", "true");
+
+      showToast("Login successful. Redirecting...");
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 500);
+    } catch (error) {
+      console.error("Login error:", error);
+      setApiError(error instanceof Error ? error.message : "An error occurred. Please try again.");
+    }
   };
 
   return (

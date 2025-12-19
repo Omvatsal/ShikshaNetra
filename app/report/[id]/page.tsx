@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getWithAuth } from "@/lib/utils/api";
 import { TimeSegments, TimeSegment } from "@/components/TimeSegments";
+import { MinuteWiseAnalytics } from "@/components/MinuteWiseAnalytics";
 
 interface Analysis {
   id: string;
@@ -18,15 +19,37 @@ interface Analysis {
   createdAt: string;
   clarityScore: number;
   confidenceScore: number;
-  audioFeatures: number[];
+  audioPerMinute?: Array<{
+    minute: number;
+    start_sec: number;
+    end_sec: number;
+    clarity_score: number;
+    confidence_score: number;
+  }>;
   engagementScore: number;
   gestureIndex: number;
   dominantEmotion: string;
+  videoConfidenceScore?: number;
+  videoPerMinute?: Array<{
+    minute: number;
+    start_sec: number;
+    end_sec: number;
+    engagement_score: number;
+    gesture_index: number;
+    dominant_emotion: string;
+    confidence_score: number;
+  }>;
   technicalDepth: number;
   interactionIndex: number;
   topicRelevanceScore: number;
-  coachSuggestions?: string[];
-  coachStrengths?: string[];
+  coachFeedback?: {
+    performance_summary?: string;
+    teaching_style?: { style: string; explanation: string };
+    strengths?: string[];
+    weaknesses?: string[];
+    factual_accuracy_audit?: string[];
+    content_metadata?: { titles: string[]; hashtags: string[] };
+  };
   videoMetadata: {
     fileName: string;
     storagePath?: string;
@@ -53,6 +76,7 @@ export default function ReportPage({ params }: { params: { id: string } }) {
     }
 
     fetchAnalysisReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchAnalysisReport = async () => {
@@ -144,12 +168,12 @@ export default function ReportPage({ params }: { params: { id: string } }) {
       summary += "areas that need attention, particularly in engagement and clarity. ";
     }
 
-    if (analysis.coachStrengths && analysis.coachStrengths.length > 0) {
-      summary += `Key strengths include ${analysis.coachStrengths[0].toLowerCase()}. `;
+    if (analysis.coachFeedback?.strengths && analysis.coachFeedback.strengths.length > 0) {
+      summary += `Key strengths include ${analysis.coachFeedback.strengths[0].toLowerCase()}. `;
     }
 
-    if (analysis.coachSuggestions && analysis.coachSuggestions.length > 0) {
-      summary += `Focus areas for improvement: ${analysis.coachSuggestions[0].toLowerCase()}.`;
+    if (analysis.coachFeedback?.weaknesses && analysis.coachFeedback.weaknesses.length > 0) {
+      summary += `Focus areas for improvement: ${analysis.coachFeedback.weaknesses[0].toLowerCase()}.`;
     }
 
     return summary;
@@ -380,6 +404,19 @@ export default function ReportPage({ params }: { params: { id: string } }) {
           </Card>
         </div>
 
+        {/* Minute-wise Analytics */}
+        <div className="mb-6">
+          <MinuteWiseAnalytics 
+            audioPerMinute={analysis.audioPerMinute}
+            videoPerMinute={analysis.videoPerMinute}
+            previousMetrics={{
+              avgClarityScore: analysis.clarityScore,
+              avgConfidenceScore: analysis.confidenceScore,
+              avgEngagementScore: analysis.engagementScore,
+            }}
+          />
+        </div>
+
 
         {/* Additional Metrics */}
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
@@ -422,37 +459,120 @@ export default function ReportPage({ params }: { params: { id: string } }) {
         )}
 
         {/* Coach Feedback */}
-        {(analysis.coachStrengths || analysis.coachSuggestions) && (
-          <div className="grid gap-6 lg:grid-cols-2 mb-6">
-            {analysis.coachStrengths && analysis.coachStrengths.length > 0 && (
-              <Card className="p-6">
-                <h2 className="text-xl font-semibold text-slate-900 mb-4">
-                  Strengths
+        {analysis.coachFeedback && (
+          <div className="space-y-6 mb-6">
+            {/* Performance Summary */}
+            {analysis.coachFeedback.performance_summary && (
+              <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-l-4 border-blue-500 p-6">
+                <h2 className="text-xl font-semibold text-slate-900 mb-3">
+                  💡 Performance Summary
                 </h2>
+                <p className="text-slate-700 leading-relaxed">
+                  {analysis.coachFeedback.performance_summary}
+                </p>
+              </Card>
+            )}
+
+            {/* Teaching Style */}
+            {analysis.coachFeedback.teaching_style && (
+              <Card className="p-6">
+                <h2 className="text-xl font-semibold text-slate-900 mb-3">
+                  🎓 Teaching Style
+                </h2>
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-purple-600">
+                    {analysis.coachFeedback.teaching_style.style}
+                  </p>
+                  <p className="text-slate-700">
+                    {analysis.coachFeedback.teaching_style.explanation}
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* Strengths & Weaknesses Grid */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {analysis.coachFeedback.strengths && analysis.coachFeedback.strengths.length > 0 && (
+                <Card className="border-l-4 border-green-500 p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    ✨ Strengths
+                  </h3>
+                  <ul className="space-y-3">
+                    {analysis.coachFeedback.strengths.map((strength, index) => (
+                      <li key={index} className="flex items-start gap-3">
+                        <span className="text-green-600 text-lg mt-0.5">✓</span>
+                        <span className="text-slate-700">{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+              {analysis.coachFeedback.weaknesses && analysis.coachFeedback.weaknesses.length > 0 && (
+                <Card className="border-l-4 border-orange-500 p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    🎯 Areas to Improve
+                  </h3>
+                  <ul className="space-y-3">
+                    {analysis.coachFeedback.weaknesses.map((weakness, index) => (
+                      <li key={index} className="flex items-start gap-3">
+                        <span className="text-orange-600 text-lg mt-0.5">→</span>
+                        <span className="text-slate-700">{weakness}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+            </div>
+
+            {/* Factual Accuracy Audit */}
+            {analysis.coachFeedback.factual_accuracy_audit && analysis.coachFeedback.factual_accuracy_audit.length > 0 && (
+              <Card className="border-l-4 border-blue-500 p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                  🔍 Factual Accuracy Audit
+                </h3>
                 <ul className="space-y-2">
-                  {analysis.coachStrengths.map((strength, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <span className="text-green-600 mt-0.5">✓</span>
-                      <span className="text-sm text-slate-700">{strength}</span>
+                  {analysis.coachFeedback.factual_accuracy_audit.map((item, index) => (
+                    <li key={index} className="flex items-start gap-2 text-slate-700">
+                      <span className="text-blue-600 mt-0.5">→</span>
+                      <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </Card>
             )}
-            {analysis.coachSuggestions && analysis.coachSuggestions.length > 0 && (
-              <Card className="p-6">
-                <h2 className="text-xl font-semibold text-slate-900 mb-4">
-                  Areas for Improvement
-                </h2>
-                <ul className="space-y-2">
-                  {analysis.coachSuggestions.map((suggestion, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <span className="text-primary-600 mt-0.5">→</span>
-                      <span className="text-sm text-slate-700">{suggestion}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
+
+            {/* Content Metadata */}
+            {analysis.coachFeedback.content_metadata && (
+              <div className="grid gap-6 lg:grid-cols-2">
+                {analysis.coachFeedback.content_metadata.titles && analysis.coachFeedback.content_metadata.titles.length > 0 && (
+                  <Card className="bg-purple-50 p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                      📺 Video Titles
+                    </h3>
+                    <ul className="space-y-2">
+                      {analysis.coachFeedback.content_metadata.titles.map((title, index) => (
+                        <li key={index} className="rounded-lg bg-white p-3 text-sm text-slate-700">
+                          {index + 1}. {title}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+                {analysis.coachFeedback.content_metadata.hashtags && analysis.coachFeedback.content_metadata.hashtags.length > 0 && (
+                  <Card className="bg-pink-50 p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                      #️⃣ Hashtags
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {analysis.coachFeedback.content_metadata.hashtags.map((tag, index) => (
+                        <span key={index} className="rounded-full bg-white px-3 py-1 text-sm font-medium text-pink-600">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </div>
             )}
           </div>
         )}
